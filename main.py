@@ -8,6 +8,10 @@ from torch import Tensor
 from transformers import AutoTokenizer, AutoModel
 from llm_models import QwenInstruct, QwenReasoning
 
+from configs import parse_args
+
+
+
 
 def last_token_pool(last_hidden_states: Tensor,
                  attention_mask: Tensor) -> Tensor:
@@ -29,20 +33,19 @@ def get_detailed_instruct(task_description: str, query: str) -> str:
 
 def main():
 
-    embedder_tokenizer = AutoTokenizer.from_pretrained('Qwen/Qwen3-Embedding-0.6B', padding_side='left')
-    embedder = AutoModel.from_pretrained('Qwen/Qwen3-Embedding-0.6B')
 
+    args = parse_args()
 
+    embedder_tokenizer = AutoTokenizer.from_pretrained(args.embedding_model_name, padding_side='left').to(args.device)
+    embedder = AutoModel.from_pretrained(args.embedding_model_name).to(args.device)
 
-    ### Note: the tokenizer pads up to the length of the longest input, up to at most the max_length value
-    max_length = 3192
 
     # Tokenize the input texts
     batch_dict_queries = embedder_tokenizer(
         queries,
         padding=True,
         truncation=True,
-        max_length=max_length,
+        max_length=args.max_tokens,
         return_tensors="pt",
     )
     # Tokenize the input texts
@@ -50,12 +53,12 @@ def main():
         documents,
         padding=True,
         truncation=True,
-        max_length=max_length,
+        max_length=args.max_tokens,
         return_tensors="pt",
     )
 
-    batch_dict_queries.to(embedder.device)
-    batch_dict_documents.to(embedder.device)
+    batch_dict_queries.to(args.device)
+    batch_dict_documents.to(args.device)
     with torch.no_grad():
         start_time = time.time()
         outputs = embedder(**batch_dict_queries)
@@ -83,19 +86,8 @@ def main():
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
+
     main()
 
 
