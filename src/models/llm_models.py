@@ -1,4 +1,18 @@
+
+import os
+import time
+
+
+import torch
+from torch import nn
+import torch.nn.functional as F
+import pandas as pd
+import numpy as np
+
+from torch import Tensor
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from llm_models import QwenInstruct, QwenReasoning
 from collections import deque
 
 class BaseChatBot:
@@ -117,4 +131,10 @@ class QwenInstruct(BaseChatBot):
 
         response = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
         return response
+
+
+
+
+
+
 

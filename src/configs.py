@@ -6,14 +6,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description="")
 
     ### Models
-    parser.add_argument("--llm_model_name", type=str, default="Qwen/Qwen3-Embedding-0.6B", choices=["Qwen/Qwen3-Embedding-0.6B"], help="Name of LLM model to use")
+    parser.add_argument("--llm_model_name", type=str, default="Qwen/Qwen3-0.6B", choices=["Qwen/Qwen3-0.6B", "Qwen/Qwen2.5-0.5B-Instruct"], help="Name of LLM model to use")
     parser.add_argument("--embedding_model_name", type=str, default="Qwen/Qwen3-Embedding-0.6B", choices=["Qwen/Qwen3-Embedding-0.6B"], help="Name of Embedding model to use")
 
 
     ### Data Settings
     parser.add_argument("--dataset_name", type=str, default="huyen_research_abstracts", choices=["huyen_research_abstracts"], help="Name of data source to use for populating vector database")
     parser.add_argument("--faiss_index_type", type=str, default="flatip", choices=["flatip"], help="Type of FAISS Index to create")
-    parser.add_argument("--chroma_collection_type", type=str, default="hnsw_cosine", choices=["hnsw_cosine"], help="Type of ChromaDB Collection to create")
+    parser.add_argument("--chroma_collection_type", type=str, default="hnsw_space_cosine", choices=["hnsw_space_cosine"], help="Type of ChromaDB Collection to create")
 
 
     ### Script Execution Details
