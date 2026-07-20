@@ -11,7 +11,7 @@ def parse_args():
 
 
     ### Data Settings
-    parser.add_argument("--text_data_source", type=str, default="huyen_research_abstracts", choices=["huyen_research_abstracts"], help="Name of data source to use for populating vector database")
+    parser.add_argument("--dataset_name", type=str, default="huyen_research_abstracts", choices=["huyen_research_abstracts"], help="Name of data source to use for populating vector database")
     parser.add_argument("--faiss_index_type", type=str, default="flatip", choices=["flatip"], help="Type of FAISS Index to create")
     parser.add_argument("--chroma_collection_type", type=str, default="hnsw_cosine", choices=["hnsw_cosine"], help="Type of ChromaDB Collection to create")
 
@@ -24,6 +24,7 @@ def parse_args():
     ### Hyperparameters
     parser.add_argument("--top_k", type=int, default=3, help="Number of documents to return with RAG")
     parser.add_argument("--max_tokens", type=int, default=3000, help="Maximum number of tokens for prompts")
+    parser.add_argument("--db_batch_size", type=int, default=64, help="Batch size used when constructing the embedding vectors for database preparation")
 
 
     ### Flags
