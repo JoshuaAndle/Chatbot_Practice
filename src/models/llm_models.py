@@ -12,76 +12,114 @@ import numpy as np
 from torch import Tensor
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from llm_models import QwenInstruct, QwenReasoning
 from collections import deque
 
 class BaseChatBot:
-    def __init__(self, history_context, max_history):
+    def __init__(self, max_history):
         self.max_history = max_history
-        self.history_context = history_context
 
         self.chat_history = deque([]) # Using a queue where each element is one prompt-answer pair
-        self.window_index = 0
 
         self.model = None
         self.tokenizer = None
 
-
+    ### Inherited by child classes to parse outputs as needed based on their output format
     def parse_output(self, model_inputs, generated_ids):
         pass
 
 
-    def prompt(self, prompt):
-        
+
+
+    def clear_history(self):
+        ### Resets the chat history for starting a new conversation
+        self.chat_history = deque([])
+
+
+
+    ### Inherited function for applying retrieved documents as context. Handled by child classes
+    def append_documents(self, query, scores, documents):
+        if documents is None:
+            return query
+
+        #!# Eventually I may want to only include top-p documents, but I might just handle that at the retrieval stage.
+        #!#    Either way I am sticking with just applying all documents for the time being. 
+        document_prompt = f"""
+        When answering this prompt use the following papers when they are useful:
+        {documents}
+
+        Answer this prompt:
+        {query}"""
+
+        return document_prompt
+
+    def get_history(self):
         context = []
         if len(self.chat_history) > 0:
-            for exchange in range(self.window_index, len(self.chat_history)):
+            for exchange in range(len(self.chat_history)):
                 context.extend(self.chat_history[exchange])
             print("\nContext of past chat window: \n", context)
+        return context
 
-        # prepare the model input using the chat template
-        messages = [{"role": "user", "content": prompt}]
-        context.extend(messages)
 
-        # print("Final context for text")
+    def apply_context(self, query, scores=None, documents=None):
+        context = self.get_history() # Apply chat history context
+        prompt = self.append_documents(query, scores, documents) # Apply document context
+
+        ### prepare the model input using the chat template
+        message = [{"role": "user", "content": prompt}]
+        context.extend(message)
+        return context, message
+
+
+    def prompt(self, query, scores=None, documents=None):
+        
+        context_query, message = self.apply_context(query, scores, documents)
+        self.chat_history.append(message)
+
         text = self.tokenizer.apply_chat_template(
-            context,
+            context_query,
             tokenize=False,
             add_generation_prompt=True,
         )
-        self.chat_history.append(messages)
 
+
+
+        ### Tokenize final prompts
         model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
 
-        # conduct text completion
+        ### Get model response
         generated_ids = self.model.generate(
             **model_inputs,
             max_new_tokens=1000
         )
 
-
-        print("Prompt: \n", text)
+        ### Parse response as needed and return result
+        print("Full Prompt: \n", text)
 
         response = self.parse_output(model_inputs, generated_ids)
 
-        print("content:", response)
+        print("-"*120, "\n\n\nResponse:", response)
 
-        messages = [{"role": "assistant", "content": response}]
-        self.chat_history.append(messages)
+        message = [{"role": "assistant", "content": response}]
+        self.chat_history.append(message)
 
+        ### If chat context is too long, remove the oldest prompt-response pair
         if len(self.chat_history) > self.max_history:
             self.chat_history.popleft()
             self.chat_history.popleft()
             
-        ### Ensures the context window moves as needed while the chat history is growing
-        if (len(self.chat_history) - self.window_index) > self.history_context:
-            self.window_index += 2
+
+
+
+
+
+
 
 
 class QwenReasoning(BaseChatBot):
     ### Chatbot built on Qwen3-0.6B reasoning model
-    def __init__(self, history_context, max_history):
-        super().__init__(history_context, max_history)
+    def __init__(self, max_history):
+        super().__init__(max_history)
 
         model_name = "Qwen/Qwen3-0.6B"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -110,10 +148,13 @@ class QwenReasoning(BaseChatBot):
         return content
 
 
+
+
+
 class QwenInstruct(BaseChatBot):
     ### Chatbot built on Qwen2.5-0.5B Instruct model
-    def __init__(self, history_context, max_history):
-        super().__init__(history_context, max_history)
+    def __init__(self, max_history):
+        super().__init__(max_history)
 
         model_name = "Qwen/Qwen2.5-0.5B-Instruct"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
