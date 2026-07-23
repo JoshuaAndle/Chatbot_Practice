@@ -65,7 +65,15 @@ class DataBaseManager():
         self.max_tokens = max_tokens
         self.db_batch_size = db_batch_size
         self.df = None
+        self.task_description = self.get_task_description()
 
+
+    def get_task_description(self):
+        if self.dataset_name == "huyen_research_abstracts":
+            self.task_description = 'Given a research paper title query, retrieve the abstract that best fits the title.'
+
+        else:
+            raise NotImplementedError(f"{self.dataset_name} not implemented for task instructions")
 
     def embed_batch(self, batch_text: list[str]) -> Tensor:
         """
@@ -115,7 +123,7 @@ class DataBaseManager():
             df["abstract_embeddings"] = [None]*df.shape[0]
             
             # Each query must come with a one-sentence instruction that describes the task
-            task = 'Given a research paper title query, retrieve the abstract that best fits the title.'
+            # task = 'Given a research paper title query, retrieve the abstract that best fits the title.'
             batch_size = self.db_batch_size
 
             titles = df["title"].tolist()
@@ -126,7 +134,7 @@ class DataBaseManager():
 
                 for step, input_text in [("title_embeddings", titles), ("abstract_embeddings", abstracts)]:
                     if step == "title_embeddings":
-                        batch_text = [get_detailed_instruct(task, title) for title in titles[start_idx:end_idx]]
+                        batch_text = [get_detailed_instruct(self.task_description, title) for title in titles[start_idx:end_idx]]
                     else:
                         # No need to add instruction for retrieval documents
                         batch_text = abstracts[start_idx:end_idx]
@@ -213,10 +221,6 @@ class DataBaseManager():
                 )
 
 
-
-
-
-
     def prepare_data(self, databases: list[str] = ["pandas", "faiss", "chromadb"]):
         """
         For a specified data source, produce the vector databases that will be used for later RAG operations
@@ -240,5 +244,131 @@ class DataBaseManager():
 
         if "chromadb" in databases:
             self.process_chroma_data()
+
+
+    def query_database(self, queries: list[str], top_k: int):
+        pass
+
+    def load_database(self):
+        pass
+
+
+
+def cossim(a,b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+class Pandas_DataBaseManager(DataBaseManager):
+    """
+    This class is designed as a 'scratch' implementation of a vector database in Pandas.
+    It is fairly simple and only handles sequential querying of all samples rather than ANN
+    """
+    def __init__(
+            self,
+            embedder_name: str,
+            dataset_name: str, 
+            index_type: str, 
+            collection_type: str, 
+            max_tokens: int, 
+            db_batch_size: int, 
+            verbose: bool,
+            device: str
+        ):
+        super(Pandas_DataBaseManager, self).__init__(embedder_name, dataset_name, index_type, collection_type, max_tokens, db_batch_size, verbose, device)
+
+
+
+    def load_database(self):
+        assert os.path.isfile(f"./data/{self.dataset_name}.parquet"), "Database not found. Need to run data_preparation operation before using database."
+        self.df = pd.read_parquet(f"./data/{self.dataset_name}.parquet")
+
+
+    def query_database(self, queries: list[str], top_k: int, embedding_type: str = "abstract"):
+
+        print(self.df.head())
+
+        if self.dataset_name == "huyen_research_abstracts":
+            if embedding_type == "abstract":
+                embedding_column = "abstract_embeddings"
+                document_column = "abstract"
+            elif embedding_type == "title":
+                embedding_column = "title_embeddings"
+                document_column = "title"
+            else:
+                raise ValueError("Only abstract and title embeddings are implemented for Pandas DB")
+
+            batch_text = [get_detailed_instruct(self.task_description, title) for title in queries]
+            query_embeddings = self.embed_batch(batch_text)
+            query_embeddings = query_embeddings.cpu().float().numpy()
+
+
+            document_embeddings = np.stack(self.df[embedding_column].values)
+            scores = np.dot(query_embeddings, document_embeddings.T)
+
+
+
+        ### Get topk indices for each query as 2d array
+        top_indices = np.argsort(scores)[:,-top_k:]
+        for q in range(len(top_indices)):
+            print("\n\nMatches for query: ", queries[q])
+            for k in top_indices[q]:
+                print(k, scores[q, k], self.df.iloc[k][document_column])
+
+
+
+
+
+
+
+
+
+
+class FAISS_DataBaseManager(DataBaseManager):
+    def __init__(
+            self,
+            embedder_name: str,
+            dataset_name: str, 
+            index_type: str, 
+            collection_type: str, 
+            max_tokens: int, 
+            db_batch_size: int, 
+            verbose: bool,
+            device: str
+        ):
+        super.__init__(embedder_name, dataset_name, index_type, collection_type, max_tokens, db_batch_size, verbose, device)
+
+
+    def load_database(self):
+        pass
+
+    def query_database(self, queries: list[str], top_k: int):
+        raise NotImplementedError("FAISS querying not implemented yet")
+
+
+
+class Chroma_DataBaseManager(DataBaseManager):
+    def __init__(
+            self,
+            embedder_name: str,
+            dataset_name: str, 
+            index_type: str, 
+            collection_type: str, 
+            max_tokens: int, 
+            db_batch_size: int, 
+            verbose: bool,
+            device: str
+        ):
+        super.__init__(embedder_name, dataset_name, index_type, collection_type, max_tokens, db_batch_size, verbose, device)
+
+
+    def load_database(self):
+        pass
+
+    def query_database(self, queries: list[str], top_k: int):
+        raise NotImplementedError("Chroma querying not implemented yet")
+                
+
+
+
+
 
 

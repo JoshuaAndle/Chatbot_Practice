@@ -17,7 +17,16 @@ def parse_args():
 
 
     ### Script Execution Details
-    parser.add_argument("--operation", type=str, choices=["data_preparation", "RAG", "RAG_FAISS", "RAG_Chroma", "RAG_LangChain"], help="Which task to execute code for")
+    parser.add_argument("--operation", type=str, choices=["data_preparation", "retrieval_only", "rag"], help="Which task to execute code for")
+    parser.add_argument("--database_type", type=str, choices=["pandas", "faiss", "chromadb"], help="Which task to execute code for")
+
+
+    ### User Inputs
+    #!# Note: For now using a simple arg as input for testing retrieval. For a proper chatbot the script should prompt user input in a loop eventually
+    parser.add_argument('--queries', nargs='*', type=str, help="List of user queries for RAG and LLM")
+
+
+
 
 
 
