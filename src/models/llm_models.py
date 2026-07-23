@@ -16,12 +16,10 @@ from llm_models import QwenInstruct, QwenReasoning
 from collections import deque
 
 class BaseChatBot:
-    def __init__(self, history_context, max_history):
+    def __init__(self, max_history):
         self.max_history = max_history
-        self.history_context = history_context
 
         self.chat_history = deque([]) # Using a queue where each element is one prompt-answer pair
-        self.window_index = 0
 
         self.model = None
         self.tokenizer = None
@@ -35,7 +33,7 @@ class BaseChatBot:
         
         context = []
         if len(self.chat_history) > 0:
-            for exchange in range(self.window_index, len(self.chat_history)):
+            for exchange in range(len(self.chat_history)):
                 context.extend(self.chat_history[exchange])
             print("\nContext of past chat window: \n", context)
 
@@ -73,15 +71,12 @@ class BaseChatBot:
             self.chat_history.popleft()
             self.chat_history.popleft()
             
-        ### Ensures the context window moves as needed while the chat history is growing
-        if (len(self.chat_history) - self.window_index) > self.history_context:
-            self.window_index += 2
 
 
 class QwenReasoning(BaseChatBot):
     ### Chatbot built on Qwen3-0.6B reasoning model
-    def __init__(self, history_context, max_history):
-        super().__init__(history_context, max_history)
+    def __init__(self, max_history):
+        super().__init__(max_history)
 
         model_name = "Qwen/Qwen3-0.6B"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -112,8 +107,8 @@ class QwenReasoning(BaseChatBot):
 
 class QwenInstruct(BaseChatBot):
     ### Chatbot built on Qwen2.5-0.5B Instruct model
-    def __init__(self, history_context, max_history):
-        super().__init__(history_context, max_history)
+    def __init__(self, max_history):
+        super().__init__(max_history)
 
         model_name = "Qwen/Qwen2.5-0.5B-Instruct"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)

@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument("--top_k", type=int, default=3, help="Number of documents to return with RAG")
     parser.add_argument("--max_tokens", type=int, default=3000, help="Maximum number of tokens for prompts")
     parser.add_argument("--db_batch_size", type=int, default=64, help="Batch size used when constructing the embedding vectors for database preparation")
+    parser.add_argument("--max_history", type=int, default=4, help="Maximum chat history for LLMs to consider for prompt context")
 
 
     ### Flags
