@@ -254,8 +254,6 @@ class DataBaseManager():
 
 
 
-def cossim(a,b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 class Pandas_DataBaseManager(DataBaseManager):
     """
@@ -278,13 +276,12 @@ class Pandas_DataBaseManager(DataBaseManager):
 
 
     def load_database(self):
-        assert os.path.isfile(f"./data/{self.dataset_name}.parquet"), "Database not found. Need to run data_preparation operation before using database."
-        self.df = pd.read_parquet(f"./data/{self.dataset_name}.parquet")
+        pandas_filepath = f"./data/{self.dataset_name}.parquet"
+        assert os.path.isfile(pandas_filepath), f"Pandas Database not found at {pandas_filepath}. Need to run data_preparation operation before using database."
+        self.df = pd.read_parquet(pandas_filepath)
 
 
     def query_database(self, queries: list[str], top_k: int, embedding_type: str = "abstract"):
-
-        print(self.df.head())
 
         if self.dataset_name == "huyen_research_abstracts":
             if embedding_type == "abstract":
@@ -305,16 +302,18 @@ class Pandas_DataBaseManager(DataBaseManager):
             scores = np.dot(query_embeddings, document_embeddings.T)
 
 
-
+        matched_documents = []
         ### Get topk indices for each query as 2d array
         top_indices = np.argsort(scores)[:,-top_k:]
         for q in range(len(top_indices)):
-            print("\n\nMatches for query: ", queries[q])
+            print("-"*100,f"\nMatches for query: {queries[q]}")            
+            matched_documents.append(self.df[document_column][top_indices[q]].values.astype("U"))
+
             for k in top_indices[q]:
                 print(k, scores[q, k], self.df.iloc[k][document_column])
 
 
-
+        return scores, top_indices, np.array(matched_documents)
 
 
 
@@ -334,15 +333,55 @@ class FAISS_DataBaseManager(DataBaseManager):
             verbose: bool,
             device: str
         ):
-        super.__init__(embedder_name, dataset_name, index_type, collection_type, max_tokens, db_batch_size, verbose, device)
+        super(FAISS_DataBaseManager, self).__init__(embedder_name, dataset_name, index_type, collection_type, max_tokens, db_batch_size, verbose, device)
+
 
 
     def load_database(self):
-        pass
+        ### Note: FAISS still relies on pandas df to lookup the indexed documents
+        pandas_filepath = f"./data/{self.dataset_name}.parquet"
+        faiss_filepath = f"./data/{self.dataset_name}.faiss"
+        assert os.path.isfile(pandas_filepath), f"Pandas Database not found at {pandas_filepath}. Need to run data_preparation operation before using database."
+        assert os.path.isfile(faiss_filepath), f"FAISS Database not found at {faiss_filepath}. Need to run data_preparation operation before using database."
+        self.df = pd.read_parquet(pandas_filepath)
 
-    def query_database(self, queries: list[str], top_k: int):
-        raise NotImplementedError("FAISS querying not implemented yet")
+        if self.index_type == "flatip":
+            self.index = faiss.read_index(faiss_filepath)
+        else:
+            raise NotImplementedError("FAISS Index types other than flatip have not been implemented yet")
 
+
+
+    def query_database(self, queries: list[str], top_k: int, embedding_type: str = "abstract"):
+
+        ### Get the document results from the query embeddings
+        batch_text = [get_detailed_instruct(self.task_description, title) for title in queries]
+        query_embeddings = self.embed_batch(batch_text)
+        query_embeddings = query_embeddings.cpu().float().numpy()
+
+        scores, indices = self.index.search(query_embeddings, top_k)
+
+        ### Look up the appropriate documents for the top indices using pandas dataframe
+        if self.dataset_name == "huyen_research_abstracts":
+            if embedding_type == "abstract":
+                embedding_column = "abstract_embeddings"
+                document_column = "abstract"
+            elif embedding_type == "title":
+                embedding_column = "title_embeddings"
+                document_column = "title"
+            else:
+                raise ValueError("Only abstract and title embeddings are implemented for Pandas DB")
+
+        matched_documents = []
+        ### Get topk indices for each query as 2d array
+        for q in range(query_embeddings.shape[0]):
+            print("-"*100,f"\nMatches for query {queries[q]}")
+            matched_documents.append(self.df[document_column][indices[q]].values.astype("U"))
+
+            for i, k in enumerate(indices[q]):
+                print(f"Match {i} for document {k} score: {scores[q][i]} and document:\n {self.df[document_column][k]}")
+
+        return scores, indices, np.array(matched_documents)
 
 
 class Chroma_DataBaseManager(DataBaseManager):
@@ -357,16 +396,43 @@ class Chroma_DataBaseManager(DataBaseManager):
             verbose: bool,
             device: str
         ):
-        super.__init__(embedder_name, dataset_name, index_type, collection_type, max_tokens, db_batch_size, verbose, device)
+        super(Chroma_DataBaseManager, self).__init__(embedder_name, dataset_name, index_type, collection_type, max_tokens, db_batch_size, verbose, device)
+
+        if dataset_name == "huyen_research_abstracts":
+            self.collection_name = "paper_abstracts"
+        else:
+            raise NotImplementedError("No Chroma collection is implemented for dataset_name: ", dataset_name)
+
+        self.client = None
+        self.collection = None
 
 
     def load_database(self):
-        pass
+        chroma_filepath = f"./data/chromadb_{self.dataset_name}"
+        assert os.path.isdir(chroma_filepath), f"Chroma Database not found at {chroma_filepath}. Need to run data_preparation operation before using database."
+        self.client = chromadb.PersistentClient(path=chroma_filepath)
+
+        if self.collection_type == "hnsw_space_cosine":
+            self.collection = self.client.get_collection(name=self.collection_name)
+        else:
+            raise NotImplementedError(f"Collection type {self.collection_type} not implemented for Chroma collection")
 
     def query_database(self, queries: list[str], top_k: int):
-        raise NotImplementedError("Chroma querying not implemented yet")
                 
 
+        ### Get the document results from the query embeddings
+        batch_text = [get_detailed_instruct(self.task_description, title) for title in queries]
+        query_embeddings = self.embed_batch(batch_text)
+        query_embeddings = query_embeddings.cpu().float().numpy()
+
+        matches = self.collection.query(query_embeddings=query_embeddings, n_results=top_k)
+        
+        for q in range(query_embeddings.shape[0]):
+            print("-"*100,f"\nMatches for query {queries[q]}")
+            for i in range(top_k):
+                print(f"Match {i} found document {matches["ids"][q][i]} with score: {matches["distances"][q][i]} and document:\n {matches["documents"][q][i]}")
+
+        return matches["distances"], matches["ids"], np.array(matches["documents"])
 
 
 

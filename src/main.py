@@ -43,7 +43,9 @@ def main():
 
     db_manager.load_database()
     if args.operation == "retrieval_only":
-        db_manager.query_database(args.queries, args.top_k)
+        scores, indices, documents = db_manager.query_database(args.queries, args.top_k)
+        print("Matched documents shape: ", documents.shape)
+        print("Matched documents: ", documents)
 
     else:
         raise ValueError(f"Invalid operation requested: {args.operation}.")
