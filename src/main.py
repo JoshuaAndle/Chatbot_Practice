@@ -18,7 +18,7 @@ from configs import parse_args
 import faiss
 import chromadb
 
-
+from databases import get_database_manager
 from databases.database_manager import DataBaseManager
 
 
@@ -29,67 +29,27 @@ def main():
 
     args = parse_args()
 
+    if args.operation == "retrieval_only":
+        assert(len(args.queries) > 0), "You need to provide a list of one or more queries as args for retrieval_only mode."
+        print("Queries for retrieval: ", args.queries)
 
     ### Prepare the manager for handling vector databases and retrieval operations
-    db_manager = DataBaseManager(
-                    embedder_name = args.embedding_model_name,
-                    dataset_name = args.dataset_name, 
-                    index_type = args.faiss_index_type, 
-                    collection_type = args.chroma_collection_type, 
-                    max_tokens = args.max_tokens, 
-                    db_batch_size = args.db_batch_size, 
-                    verbose = args.verbose,
-                    device = args.device
-                )
+    db_manager = get_database_manager(args)
 
     ### Run the requested RAG operations
     if args.operation == "data_preparation":
         db_manager.prepare_data(databases = ["pandas", "faiss", "chromadb"])
 
+
+    db_manager.load_database()
+    if args.operation == "retrieval_only":
+        scores, indices, documents = db_manager.query_database(args.queries, args.top_k)
+        print("Matched documents shape: ", documents.shape)
+        print("Matched documents: ", documents)
+
     else:
         raise ValueError(f"Invalid operation requested: {args.operation}.")
 
-
-
-
-
-    # # Tokenize the input texts
-    # batch_dict_queries = embedder_tokenizer(
-    #     queries,
-    #     padding=True,
-    #     truncation=True,
-    #     max_length=args.max_tokens,
-    #     return_tensors="pt",
-    # )
-    # # Tokenize the input texts
-    # batch_dict_documents = embedder_tokenizer(
-    #     documents,
-    #     padding=True,
-    #     truncation=True,
-    #     max_length=args.max_tokens,
-    #     return_tensors="pt",
-    # )
-
-    # batch_dict_queries.to(args.device)
-    # batch_dict_documents.to(args.device)
-    # with torch.no_grad():
-    #     start_time = time.time()
-    #     outputs = embedder(**batch_dict_queries)
-    #     query_embeddings = last_token_pool(outputs.last_hidden_state, batch_dict_queries['attention_mask'])
-    #     # normalize embeddings
-    #     query_embeddings = F.normalize(query_embeddings, p=2, dim=1)
-
-    #     print("Time taken to embed queries: ", time.time() - start_time)
-    #     start_time = time.time()
-
-    #     outputs = embedder(**batch_dict_documents)
-    #     document_embeddings = last_token_pool(outputs.last_hidden_state, batch_dict_documents['attention_mask'])
-    #     document_embeddings = F.normalize(document_embeddings, p=2, dim=1)
-    #     print("Time taken to embed documents: ", time.time() - start_time)
-
-    #     scores = (query_embeddings @ document_embeddings.T)
-
-    # print(scores.tolist())
 
 
 
