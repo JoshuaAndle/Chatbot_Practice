@@ -49,9 +49,15 @@ def main():
         print("Matched documents shape: ", documents.shape)
         print("Matched documents: ", documents)
 
+    ### Given the documents retrieved from the vector database, prompt the LLM for an answer
     if args.operation == "rag":
         llm_model = get_llm(args)
-        
+
+        #!# Note: Doesn't really make sense to me to simultaneously prompt sequential queries, so we just loop over them and clear history each time
+        for i, query in enumerate(args.queries):
+            print("="*120, f"\nAnswer query: {query}\n\n")
+            llm_model.prompt(query, scores[i], documents[i]) # LLM applies context from provided documents
+            llm_model.clear_history()
 
 
     else:

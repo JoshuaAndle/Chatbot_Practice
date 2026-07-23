@@ -12,7 +12,6 @@ import numpy as np
 from torch import Tensor
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from llm_models import QwenInstruct, QwenReasoning
 from collections import deque
 
 class BaseChatBot:
@@ -24,53 +23,97 @@ class BaseChatBot:
         self.model = None
         self.tokenizer = None
 
-
+    ### Inherited by child classes to parse outputs as needed based on their output format
     def parse_output(self, model_inputs, generated_ids):
         pass
 
 
-    def prompt(self, prompt):
-        
+
+
+    def clear_history(self):
+        ### Resets the chat history for starting a new conversation
+        self.chat_history = deque([])
+
+
+
+    ### Inherited function for applying retrieved documents as context. Handled by child classes
+    def append_documents(self, query, scores, documents):
+        if documents is None:
+            return query
+
+        #!# Eventually I may want to only include top-p documents, but I might just handle that at the retrieval stage.
+        #!#    Either way I am sticking with just applying all documents for the time being. 
+        document_prompt = f"""
+        When answering this prompt use the following papers when they are useful:
+        {documents}
+
+        Answer this prompt:
+        {query}"""
+
+        return document_prompt
+
+    def get_history(self):
         context = []
         if len(self.chat_history) > 0:
             for exchange in range(len(self.chat_history)):
                 context.extend(self.chat_history[exchange])
             print("\nContext of past chat window: \n", context)
+        return context
 
-        # prepare the model input using the chat template
-        messages = [{"role": "user", "content": prompt}]
-        context.extend(messages)
 
-        # print("Final context for text")
+    def apply_context(self, query, scores=None, documents=None):
+        context = self.get_history() # Apply chat history context
+        prompt = self.append_documents(query, scores, documents) # Apply document context
+
+        ### prepare the model input using the chat template
+        message = [{"role": "user", "content": prompt}]
+        context.extend(message)
+        return context, message
+
+
+    def prompt(self, query, scores=None, documents=None):
+        
+        context_query, message = self.apply_context(query, scores, documents)
+        self.chat_history.append(message)
+
         text = self.tokenizer.apply_chat_template(
-            context,
+            context_query,
             tokenize=False,
             add_generation_prompt=True,
         )
-        self.chat_history.append(messages)
 
+
+
+        ### Tokenize final prompts
         model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
 
-        # conduct text completion
+        ### Get model response
         generated_ids = self.model.generate(
             **model_inputs,
             max_new_tokens=1000
         )
 
-
-        print("Prompt: \n", text)
+        ### Parse response as needed and return result
+        print("Full Prompt: \n", text)
 
         response = self.parse_output(model_inputs, generated_ids)
 
-        print("content:", response)
+        print("-"*120, "\n\n\nResponse:", response)
 
-        messages = [{"role": "assistant", "content": response}]
-        self.chat_history.append(messages)
+        message = [{"role": "assistant", "content": response}]
+        self.chat_history.append(message)
 
+        ### If chat context is too long, remove the oldest prompt-response pair
         if len(self.chat_history) > self.max_history:
             self.chat_history.popleft()
             self.chat_history.popleft()
             
+
+
+
+
+
+
 
 
 class QwenReasoning(BaseChatBot):
@@ -103,6 +146,9 @@ class QwenReasoning(BaseChatBot):
         print("thinking content:", thinking_content)
 
         return content
+
+
+
 
 
 class QwenInstruct(BaseChatBot):
